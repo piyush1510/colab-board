@@ -1,20 +1,38 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./Board.css";
+import io from "socket.io-client";
 
 export default function Board() {
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
   const points = useRef([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const ioRef = useRef(null);
+
+  // console.log('yo');
   async function sendPoints() {
-    try {
-      console.log(points.current);
-      return null;
-    } catch (err) {
-      return err;
+    if(points.current.length)
+    ioRef.current.emit("points", points.current);
+    points.current = [];
+    return false;
+  }
+  function drawFrom(pts) {
+    if (pts.length === 0) return;
+    var [x, y] = pts[0];
+
+    ctxRef.current.beginPath();
+    ctxRef.current.moveTo(x, y);
+
+    for (let i = 0; i < pts.length; i++) {
+      ctxRef.current.lineTo(pts[i][0], pts[i][1]);
+
+      ctxRef.current.stroke();
     }
+    ctxRef.current.closePath();
   }
   useEffect(() => {
+    ioRef.current = io.connect("localhost:5000");
+    ioRef.current.on("draw", drawFrom);
     const canvas = canvasRef.current;
     canvas.width = 600 * 2;
     canvas.height = 400 * 2;
@@ -26,24 +44,29 @@ export default function Board() {
     ctx.strokeStyle = "black";
     ctx.lineWidth = 5;
     ctxRef.current = ctx;
-    setInterval(async () => {
-      if (!points.current.length) return;
-      //send points
-      // if sent only then clear points
-      if(await sendPoints())
-        points.current = [];
-    }, 1000);
+    // setInterval(async () => {
+    //   if (!points.current.length) return;
+    //   //send points
+    //   // if sent only then clear points
+    //   const res=await sendPoints();
+    //   if(!res)
+    //     points.current = [];
+    //   else console.log(res);
+    // }, 1000);
   }, []);
 
   function startDrawing({ nativeEvent }) {
     const { offsetX, offsetY } = nativeEvent;
+    points.current.push([offsetX, offsetY]);
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(offsetX, offsetY);
     setIsDrawing(true);
   }
   function endDrawing() {
     ctxRef.current.closePath();
+
     setIsDrawing(false);
+    sendPoints();
   }
   function draw({ nativeEvent }) {
     if (!isDrawing) return;
@@ -54,12 +77,12 @@ export default function Board() {
     ctxRef.current.stroke();
   }
   return (
-      <canvas
-        ref={canvasRef}
-        onMouseDown={startDrawing}
-        onMouseUp={endDrawing}
-        onMouseMove={draw}
-        onMouseLeave={endDrawing}
-      />
+    <canvas
+      ref={canvasRef}
+      onMouseDown={startDrawing}
+      onMouseUp={endDrawing}
+      onMouseMove={draw}
+      onMouseLeave={endDrawing}
+    />
   );
 }
